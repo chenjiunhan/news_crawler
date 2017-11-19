@@ -6,20 +6,28 @@ from selenium import webdriver
 import re
 import datetime
 import time
+import os
 from time import gmtime, strftime
 
 url_root = 'https://www.ettoday.net'
 url = url_root + '/news/focus/%E6%94%BF%E6%B2%BB/'
 
 ARTICAL_LIMITATION = 1000
+NEWS_DIR_PATH = 'news' + os.sep
+SAVE_TO_ONE_FILE = False
+FROM_DATE = '2017-11-19'
+TO_DATE = '2017-11-19'
+ONE_FILE_DIR = NEWS_DIR_PATH + 'one_file' + os.sep
+ONE_FILE_PATH = ONE_FILE_DIR + FROM_DATE + '_to_' + TO_DATE + '.txt'
 
 driver = webdriver.Chrome('/home/jaqq/anaconda3/bin/chromedriver')
 driver.get(url)
 
 class News:
-    def __init__(self, title, link, date = None, author = None, content = None):
+    def __init__(self, title, link, date_ts = None, date = None, author = None, content = None):
         self.title = title
         self.link = link
+        self.date_ts = date_ts
         self.date = date
         self.author = author
         self.content = content
@@ -34,8 +42,6 @@ last_height = driver.execute_script("return document.body.scrollHeight")
 def get_date_ts_from_str(date_str):
     date = re.findall(r"([0-9]+)月([0-9]+)日 ([0-9]+):([0-9]+)", date_str)    
     if len(date) > 0:
-        #TODO cross year        
-        print(date)
         date = date[0]
         if int(datetime.datetime.now().month) < int(date[1]):
             year = int(datetime.datetime.now().year) - 1
@@ -64,12 +70,6 @@ def get_date_ts_from_str(date_str):
         return date_str
 
 while True:
-    '''soup = BeautifulSoup(driver.page_source, "html.parser")
-    last_date = soup.findAll("span", {"class" : "date"})
-    print(last_date)
-    last_date = last_date[-1].text
-    last_date = get_date_ts_from_str(last_date)
-    last_date_ts = int(time.mktime(datetime.datetime.strptime(last_date, '%Y-%m-%d %H:%M').timetuple()))'''
 
     soup = BeautifulSoup(driver.page_source, "html.parser")
     news_divs = soup.select('div.part_pictxt_3')
@@ -83,8 +83,9 @@ while True:
     if last_date_ts < int(time.mktime(time.gmtime(time.time()))) - 86400:     
         break
     else:
-        print(last_date_ts, int(time.mktime(time.gmtime(time.time()))) - 86400)
-    if count_scroll > 100:
+        pass
+
+    if count_scroll > 1:
         break
     # Scroll down to bottom
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
@@ -111,29 +112,40 @@ for current_news in news_divs:
 
     date = current_news.select("span[class=date]")
     date = date[-1].text
-    print(date)
     date = get_date_ts_from_str(date)
-    print(date)
     date_ts = int(time.mktime(datetime.datetime.strptime(date, '%Y-%m-%d %H:%M').timetuple()))
 
-    #for title in titles:        
     link = re.findall(r"/news\S+\.htm", title['href'])
-    #if len(link) == 0:
-    #    continue
+    
     print(title.text, url_root + link[0], date)
-    news_dict[title.text] = News(title.text, url_root + link[0], date = date_ts)
+    
+    news_dict[title.text] = News(title.text, url_root + link[0], date_ts = date_ts, date = datetime.datetime.fromtimestamp(date_ts))
 
+if SAVE_TO_ONE_FILE:
+    if not os.path.exists(ONE_FILE_DIR):
+        os.makedirs(ONE_FILE_DIR)
+    f = open(ONE_FILE_PATH, 'w')
 
 for key, news in news_dict.items():
-    print(news.title, news.link, news.date)
+    #print(news.title, news.link, news.date)
+    print(news.date.year, news.date.month, news.date.day)
     driver.get(news.link)
     soup = BeautifulSoup(driver.page_source, "html.parser")
     news_content = soup.select('div.story')[0].get_text()
-    news_dict[key] = news_content
+    news_dict[key].content = news_content
+    # TODO get correct date here
+    if SAVE_TO_ONE_FILE:
+        f.write(news.content)
+    else:
+        news_dir = NEWS_DIR_PATH + os.sep + str(news.date.year) + os.sep + str(news.date.month) + os.sep + str(news.date.day) + os.sep
+        if not os.path.exists(NEWS_DIR_PATH):
+            os.makedirs(news_dir)
+        # TODO append
+        f = open(news_dir + 'news.txt', 'w')
+        f.write(news.content)
+        f.close()
     time.sleep(5)
+    break
 
-f = open('news', 'w')
-
-#for key, news in news_dict.items():
-    #w
-f.close()
+if SAVE_TO_ONE_FILE:
+    f.close()
